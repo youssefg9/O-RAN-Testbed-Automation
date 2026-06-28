@@ -63,7 +63,7 @@ else
     sudo chown --recursive "${SUDO_USER:-$USER}" logs
 
     sudo -v # Ensure sudo session is active
-    sudo env $ZMQ_BROKER_UI_ENV setsid bash -c "stdbuf -oL -eL \"$SCRIPT_DIR/run.sh\" >/dev/null 2>&1" </dev/null &
+    sudo env NUM_UES="${NUM_UES:-3}" $ZMQ_BROKER_UI_ENV setsid bash -c "stdbuf -oL -eL \"$SCRIPT_DIR/run.sh\" >/dev/null 2>&1" </dev/null &
 
     ATTEMPT=0
     # while [ ! -f logs/gnb_stdout.txt ] || ! grep -q "gNB started" logs/gnb_stdout.txt; do

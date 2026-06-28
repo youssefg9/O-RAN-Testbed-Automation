@@ -1,0 +1,20 @@
+{
+  "gnb": {
+    "type": "srsran"
+  },
+  "ue": {
+    "type": "srsran",
+    "num_ues": 3
+  },
+    "ric": {
+        "enabled": true,
+        "config": "configs/flexric.conf",
+        "xapp": "none"
+  },
+  "grafana": {
+    "enabled": true,
+    "csv_periodicity_ms": 1000,
+    "ocudu_url": "http://localhost:3300",
+    "flexric_url": "http://localhost:3000/dashboards"
+  }
+}

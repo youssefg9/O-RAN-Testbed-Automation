@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./run_iperf --ues 1,2
+
+Options:
+  --ues LIST         Comma-separated UE IDs (required), e.g. 1,2 or 1,2,3
+  --time SEC         Test duration in seconds (default: 120)
+  --target IP        Server IP reachable by UEs (default: 10.45.0.1)
+  --reverse          Run downlink test (-R, default)
+  --forward          Run uplink test (disables -R)
+  --start-servers    Start iperf3 servers for selected UEs (default: enabled)
+  --no-servers       Do not start iperf3 servers
+  --base-port PORT   Port base, UE N uses base+(N-1) (default: 5201)
+  --bw VALUE         Override all UEs bandwidth, e.g. 4M
+  -h, --help         Show this help
+
+Examples:
+  ./run_iperf --ues 1,2
+  ./run_iperf --ues 1,2,3 --time 300
+  ./run_iperf --ues 2 --bw 6M --forward
+EOF
+}
+
+UES=""
+DURATION=120
+TARGET_IP="10.45.0.1"
+REVERSE=true
+START_SERVERS=true
+BASE_PORT=5201
+BW_OVERRIDE=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --ues)
+      UES="${2:-}"
+      shift 2
+      ;;
+    --time)
+      DURATION="${2:-}"
+      shift 2
+      ;;
+    --target)
+      TARGET_IP="${2:-}"
+      shift 2
+      ;;
+    --reverse)
+      REVERSE=true
+      shift
+      ;;
+    --forward)
+      REVERSE=false
+      shift
+      ;;
+    --start-servers)
+      START_SERVERS=true
+      shift
+      ;;
+    --no-servers)
+      START_SERVERS=false
+      shift
+      ;;
+    --base-port)
+      BASE_PORT="${2:-}"
+      shift 2
+      ;;
+    --bw)
+      BW_OVERRIDE="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+if [[ -z "$UES" ]]; then
+  echo "Error: --ues is required" >&2
+  usage
+  exit 1
+fi
+
+if ! [[ "$DURATION" =~ ^[0-9]+$ ]] || [[ "$DURATION" -le 0 ]]; then
+  echo "Error: --time must be a positive integer" >&2
+  exit 1
+fi
+
+if ! [[ "$BASE_PORT" =~ ^[0-9]+$ ]] || [[ "$BASE_PORT" -le 0 ]]; then
+  echo "Error: --base-port must be a positive integer" >&2
+  exit 1
+fi
+
+if ! command -v iperf3 >/dev/null 2>&1; then
+  echo "Error: iperf3 is not installed" >&2
+  exit 1
+fi
+
+IFS=',' read -r -a UE_LIST <<< "$UES"
+if [[ ${#UE_LIST[@]} -eq 0 ]]; then
+  echo "Error: no UE IDs parsed from --ues" >&2
+  exit 1
+fi
+
+declare -A seen=()
+PIDS=()
+
+echo "Running iperf for UEs: $UES"
+echo "Duration: ${DURATION}s | Target: ${TARGET_IP} | Base port: ${BASE_PORT}"
+
+for ue_raw in "${UE_LIST[@]}"; do
+  ue="${ue_raw//[[:space:]]/}"
+
+  if ! [[ "$ue" =~ ^[0-9]+$ ]] || [[ "$ue" -le 0 ]]; then
+    echo "Error: invalid UE ID '$ue_raw'" >&2
+    exit 1
+  fi
+
+  if [[ -n "${seen[$ue]:-}" ]]; then
+    continue
+  fi
+  seen[$ue]=1
+
+  ns="ue${ue}"
+  port=$((BASE_PORT + ue - 1))
+  if ! sudo ip netns list | awk '{print $1}' | grep -qx "$ns"; then
+    echo "Error: namespace $ns not found. Is UE $ue running?" >&2
+    exit 1
+  fi
+
+  if [[ "$START_SERVERS" == true ]]; then
+    if pgrep -f "iperf3 -s -p ${port}" >/dev/null 2>&1; then
+      echo "Server already running on port ${port}"
+    else
+      echo "Starting iperf3 server on port ${port}"
+      iperf3 -s -p "${port}" -D
+    fi
+  fi
+
+  args=(iperf3 -c "${TARGET_IP}" -p "${port}" -t "${DURATION}" -i 1)
+  if [[ -n "$BW_OVERRIDE" ]]; then
+    args+=(-b "$BW_OVERRIDE")
+  fi
+  if [[ "$REVERSE" == true ]]; then
+    args+=(-R)
+  fi
+
+  log_file="/tmp/${ns}_iperf_${port}.log"
+  # Old logs may be root-owned from manual runs; ensure current caller can write.
+  sudo rm -f "${log_file}" >/dev/null 2>&1 || true
+  echo "Launching ${ns}: port=${port}, bw=auto, log=${log_file}"
+  sudo ip netns exec "$ns" stdbuf -oL -eL "${args[@]}" >"${log_file}" 2>&1 &
+  PIDS+=("$!")
+done
+
+if [[ ${#PIDS[@]} -eq 0 ]]; then
+  echo "No clients launched."
+  exit 1
+fi
+
+echo "Waiting for ${#PIDS[@]} iperf client(s) to finish..."
+rc=0
+for pid in "${PIDS[@]}"; do
+  if ! wait "$pid"; then
+    rc=1
+  fi
+done
+
+echo
+if [[ "$rc" -eq 0 ]]; then
+  echo "All iperf clients completed successfully."
+else
+  echo "One or more iperf clients failed. Check /tmp/ue*_iperf_*.log" >&2
+fi
+
+exit "$rc"

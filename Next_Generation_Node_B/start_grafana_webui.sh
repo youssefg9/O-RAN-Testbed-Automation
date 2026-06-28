@@ -42,6 +42,11 @@ cd "$SCRIPT_DIR"
 
 echo "Starting Grafana WebUI setup..."
 
+if [ "$(sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null)" = "1" ]; then
+    echo "Disabling net.bridge.bridge-nf-call-iptables to allow metrics container traffic..."
+    sudo sysctl -w net.bridge.bridge-nf-call-iptables=0 >/dev/null 2>&1 || true
+fi
+
 COMPOSE_FILE="ocudu/docker/docker-compose.ui.yml"
 OVERRIDE_FILE="ocudu/docker/docker-compose.override.yml"
 

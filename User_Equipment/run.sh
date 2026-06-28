@@ -90,9 +90,13 @@ else
         exit 1
     fi
     mkdir -p logs
-    >logs/ue${UE_NUMBER}_stdout.txt
     sudo chown --recursive "${SUDO_USER:-$USER}" logs
-    echo "Starting srsue (ue$UE_NUMBER) in namespace ue$UE_NUMBER..."
-    # sudo ./srsRAN_4G/build/srsue/src/srsue --config_file "$UE_CONF_PATH"
-    sudo ip netns exec "ue$UE_NUMBER" script -q -f -c "./srsRAN_4G/build/srsue/src/srsue --config_file \"$UE_CONF_PATH\"" logs/ue${UE_NUMBER}_stdout.txt
+    >logs/ue${UE_NUMBER}_stdout.txt
+    echo "Starting srsue (ue$UE_NUMBER) with namespace ue$UE_NUMBER for data plane..."
+    NR_RA_PREAMBLE="${SRSUE_NR_RA_PREAMBLE:-$((UE_NUMBER - 1))}"
+    echo "Using NR random-access preamble index $NR_RA_PREAMBLE for ue$UE_NUMBER."
+    # Run srsue on the host (not inside namespace) - ZMQ stays on localhost.
+    # The [gw] netns setting in the config places the tun device in the namespace.
+    sudo SRSUE_NR_RA_PREAMBLE="$NR_RA_PREAMBLE" \
+        script -q -f -c "./srsRAN_4G/build/srsue/src/srsue --config_file \"$UE_CONF_PATH\"" logs/ue${UE_NUMBER}_stdout.txt
 fi

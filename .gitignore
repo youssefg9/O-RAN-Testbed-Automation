@@ -1,0 +1,27 @@
+# Build artifacts
+build/
+*.o
+*.so
+*.a
+*.la
+*.lo
+*.class
+*.pyc
+__pycache__/
+
+# Logs
+logs/
+*.log
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# System
+*Zone.Identifier*

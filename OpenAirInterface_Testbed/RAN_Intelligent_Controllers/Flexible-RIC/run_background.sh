@@ -28,8 +28,8 @@
 # damage to property. The software developed by NIST employees is not subject to
 # copyright protection within the United States.
 
-# FLEXRIC_LIBRARY_DIR="/usr/local/lib/flexric/" # Default
-FLEXRIC_LIBRARY_DIR="flexric/build/flexric_libraries/lib/flexric/"
+# FLEXRIC_LIBRARY_DIR="flexric/build/flexric_libraries/lib/flexric/" # Build dir (if exists)
+FLEXRIC_LIBRARY_DIR="/usr/local/lib/flexric/"
 
 APTVARS="NEEDRESTART_MODE=l NEEDRESTART_SUSPEND=1 DEBIAN_FRONTEND=noninteractive"
 if ! command -v realpath &>/dev/null; then
@@ -37,7 +37,7 @@ if ! command -v realpath &>/dev/null; then
     sudo env $APTVARS apt-get install -y coreutils
 fi
 
-SCRIPT_DIR=$(dirname "$(realpath "$0")")
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 cd "$SCRIPT_DIR"
 
 if [[ "$FLEXRIC_LIBRARY_DIR" != /* ]]; then

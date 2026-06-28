@@ -56,23 +56,32 @@ if pgrep -x "gnb" >/dev/null; then
 else
     echo "Starting gnb..."
     mkdir -p logs
+    sudo chown --recursive "${SUDO_USER:-$USER}" logs
     >logs/gnb.log
     >logs/gnb_stdout.txt
 
-    if pgrep -f "[p]ython3 zmq_broker/multi_ue_scenario\.py" >/dev/null; then
-        echo "Already running ZMQ Broker."
-    else
+    if [ "${DELAY_ZMQ_BROKER:-}" != "1" ]; then
+        # Kill any stale broker to ensure fresh env vars and code are picked up
+        sudo pkill -f "[p]ython3 .*zmq_broker/multi_ue_scenario" 2>/dev/null || true
+        sleep 1
+        sudo pkill -9 -f "[p]ython3 .*zmq_broker/multi_ue_scenario" 2>/dev/null || true
+        sleep 1
         >logs/zmq_broker.log
-        echo "Starting ZMQ Broker..."
+        CIR_ARGS=""
+        if [ -n "${CIR_DIR:-}" ]; then
+            CIR_ARGS="--cir-dir ${CIR_DIR}"
+        fi
+        CH_ARGS="${CIR_ARGS}"
+        echo "Starting ZMQ Broker (${NUM_UES:-3} UEs)${CH_ARGS:+ $CH_ARGS}..."
         if [ "$SHOW_ZMQ_BROKER_UI" = true ]; then
-            nohup python3 zmq_broker/multi_ue_scenario.py >logs/zmq_broker.log 2>&1 &
+            nohup python3 zmq_broker/multi_ue_scenario_custom.py \
+                --num-ues "${NUM_UES:-3}" $CH_ARGS >logs/zmq_broker.log 2>&1 &
         else
-            QT_QPA_PLATFORM=offscreen nohup python3 zmq_broker/multi_ue_scenario.py >logs/zmq_broker.log 2>&1 &
+            QT_QPA_PLATFORM=offscreen nohup python3 zmq_broker/multi_ue_scenario_custom.py \
+                --num-ues "${NUM_UES:-3}" $CH_ARGS >logs/zmq_broker.log 2>&1 &
         fi
         sleep 2
     fi
-
-    sudo chown --recursive "${SUDO_USER:-$USER}" logs
 
     # ocudu/build/apps/gnb/gnb -c configs/gnb.yaml # cell_cfg prach --ports 0 1 2
     sudo script -q -f -c "./ocudu/build/apps/gnb/gnb -c configs/gnb.yaml" logs/gnb_stdout.txt # cell_cfg prach --ports 0 1 2

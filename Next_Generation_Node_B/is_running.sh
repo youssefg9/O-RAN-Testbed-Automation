@@ -43,7 +43,7 @@ else
     echo "gNodeB: NOT_RUNNING"
 fi
 
-if pgrep -f "[p]ython3 zmq_broker/multi_ue_scenario\.py" >/dev/null; then
+if pgrep -f "[p]ython3 .*zmq_broker/multi_ue_scenario(_custom)?\.py" >/dev/null; then
     echo "ZMQ_Broker: RUNNING"
 else
     echo "ZMQ_Broker: NOT_RUNNING"
